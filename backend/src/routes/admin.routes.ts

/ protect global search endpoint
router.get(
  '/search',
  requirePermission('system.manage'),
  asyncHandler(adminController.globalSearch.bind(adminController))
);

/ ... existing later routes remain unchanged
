@@ -1,0 +1,262 @@
+import fs from 'fs';
+import path from 'path';
+import { prisma } from '../../config/prisma';
+import { logger } from '../../utils/logger';
+import { AppError } from '../../utils/appError';
+
+export class BackupService {
+  private backupDir = path.resolve(process.cwd(), 'backups');
+
+  constructor() {
+    if (!fs.existsSync(this.backupDir)) {
+      try {
+        fs.mkdirSync(this.backupDir, { recursive: true });
+      } catch (err) {
+        logger.warn('Could not create backup directory', { error: String(err) });
+      }
+    }
+  }
+
+  public async createBackup(): Promise<{ filename: string; sizeBytes: number; createdAt: string }> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `backup-enterprise-${timestamp}.json`;
+    const targetPath = path.join(this.backupDir, filename);
+
+    const [users, roles, permissions, settings, pages, messages] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          roleId: true,
+          status: true,
+          createdAt: true,
+        },
+      }),
+      prisma.role.findMany(),
+      prisma.permission.findMany(),
+      prisma.systemSetting.findMany(),
+      prisma.page.findMany(),
+      prisma.contactMessage.findMany({ take: 100 }),
+    ]);
+
+    const backupData = {
+      meta: {
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+      },
+      data: {
+        users,
+        roles,
+        permissions,
+        settings,
+        pages,
+        messages,
+      },
+    };
+
+    fs.writeFileSync(targetPath, JSON.stringify(backupData, null, 2), 'utf-8');
+    const stats = fs.statSync(targetPath);
+
+    logger.info('Enterprise system backup created successfully', { filename, size: stats.size });
+
+    return {
+      filename,
+      sizeBytes: stats.size,
+      createdAt: backupData.meta.timestamp,
+    };
+  }
+
+  public async listBackups(): Promise<Array<{ filename: string; sizeBytes: number; createdAt: string }>> {
+    if (!fs.existsSync(this.backupDir)) {
+      return [];
+    }
+
+    const files = fs.readdirSync(this.backupDir).filter((f) => f.endsWith('.json'));
+    return files
+      .map((filename) => {
+        const stat = fs.statSync(path.join(this.backupDir, filename));
+        return {
+          filename,
+          sizeBytes: stat.size,
+          createdAt: stat.birthtime.toISOString(),
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  public async restoreBackup(filename: string, confirmCode: string): Promise<boolean> {
+    if (confirmCode !== 'RESTORE_CONFIRMED') {
+      throw new AppError('يتطلب استرجاع النسخة الاحتياطية كود تأكيد مزدوج (RESTORE_CONFIRMED)', 400, 'RESTORE_NOT_CONFIRMED');
+    }
+
+    const filePath = path.join(this.backupDir, filename);
+    if (!fs.existsSync(filePath)) {
+      throw new AppError('ملف النسخة الاحتياطية المحدد غير موجود', 404, 'BACKUP_FILE_NOT_FOUND');
+    }
+
+    let payload: any;
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      payload = JSON.parse(raw);
+    } catch {
+      throw new AppError('ملف النسخة الاحتياطية تالف أو غير قابل للقراءة', 400, 'BACKUP_INVALID');
+    }
+
+    const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+    if (!data || typeof data !== 'object') {
+      throw new AppError('هيكل نسخة الاحتياطية غير صحيح', 400, 'BACKUP_INVALID');
+    }
+
+    logger.info('Starting backup restoration', { filename });
+
+    await prisma.$transaction(async (tx) => {
+      if (Array.isArray(data.roles)) {
+        for (const role of data.roles) {
+          if (!role?.slug) continue;
+          await tx.role.upsert({
+            where: { slug: String(role.slug) },
+            update: {
+              name: role.name ?? 'Unknown',
+              description: role.description ?? null,
+              isSystem: Boolean(role.isSystem),
+            },
+            create: {
+              name: role.name ?? 'Unknown',
+              slug: String(role.slug),
+              description: role.description ?? null,
+              isSystem: Boolean(role.isSystem),
+            },
+          });
+        }
+      }
+
+      if (Array.isArray(data.permissions)) {
+        for (const permission of data.permissions) {
+          if (!permission?.slug) continue;
+          await tx.permission.upsert({
+            where: { slug: String(permission.slug) },
+            update: {
+              module: permission.module ?? 'general',
+              description: permission.description ?? '',
+            },
+            create: {
+              slug: String(permission.slug),
+              module: permission.module ?? 'general',
+              description: permission.description ?? '',
+            },
+          });
+        }
+      }
+
+      if (Array.isArray(data.settings)) {
+        for (const setting of data.settings) {
+          if (!setting?.key) continue;
+          await tx.systemSetting.upsert({
+            where: { key: String(setting.key) },
+            update: {
+              value: String(setting.value ?? ''),
+              group: setting.group ?? 'general',
+              isSecret: Boolean(setting.isSecret),
+              description: setting.description ?? null,
+            },
+            create: {
+              key: String(setting.key),
+              value: String(setting.value ?? ''),
+              group: setting.group ?? 'general',
+              isSecret: Boolean(setting.isSecret),
+              isSystem: Boolean(setting.isSystem ?? true),
+              description: setting.description ?? null,
+            },
+          });
+        }
+      }
+
+      if (Array.isArray(data.pages)) {
+        for (const page of data.pages) {
+          if (!page?.slug) continue;
+          await tx.page.upsert({
+            where: { slug: String(page.slug) },
+            update: {
+              title: page.title ?? 'Untitled',
+              content: page.content ?? '',
+              metaTitle: page.metaTitle ?? null,
+              metaDescription: page.metaDescription ?? null,
+              metaKeywords: page.metaKeywords ?? null,
+              order: Number(page.order ?? 0),
+              isPublished: Boolean(page.isPublished ?? true),
+              deletedAt: page.deletedAt ? new Date(page.deletedAt) : null,
+            },
+            create: {
+              slug: String(page.slug),
+              title: page.title ?? 'Untitled',
+              content: page.content ?? '',
+              metaTitle: page.metaTitle ?? null,
+              metaDescription: page.metaDescription ?? null,
+              metaKeywords: page.metaKeywords ?? null,
+              order: Number(page.order ?? 0),
+              isPublished: Boolean(page.isPublished ?? true),
+              deletedAt: page.deletedAt ? new Date(page.deletedAt) : null,
+            },
+          });
+        }
+      }
+
+      if (Array.isArray(data.users)) {
+        for (const user of data.users) {
+          if (!user?.email) continue;
+          const safeRoleId = user.roleId ? Number(user.roleId) : null;
+          const existingRole = safeRoleId
+            ? await tx.role.findUnique({ where: { id: safeRoleId } })
+            : await tx.role.findFirst({ where: { slug: 'user' } });
+
+          await tx.user.upsert({
+            where: { email: String(user.email) },
+            update: {
+              firstName: user.firstName ?? 'User',
+              lastName: user.lastName ?? '',
+              phone: user.phone ?? null,
+              avatar: user.avatar ?? null,
+              status: user.status ?? 'ACTIVE',
+              roleId: existingRole?.id ?? 1,
+              passwordHash: user.passwordHash ?? 'restored-user-placeholder',
+              deletedAt: user.deletedAt ? new Date(user.deletedAt) : null,
+            },
+            create: {
+              email: String(user.email),
+              firstName: user.firstName ?? 'User',
+              lastName: user.lastName ?? '',
+              phone: user.phone ?? null,
+              avatar: user.avatar ?? null,
+              status: user.status ?? 'ACTIVE',
+              roleId: existingRole?.id ?? 1,
+              passwordHash: user.passwordHash ?? 'restored-user-placeholder',
+              deletedAt: user.deletedAt ? new Date(user.deletedAt) : null,
+            },
+          });
+        }
+      }
+
+      if (Array.isArray(data.messages)) {
+        for (const message of data.messages) {
+          await tx.contactMessage.create({
+            data: {
+              name: message?.name ?? 'Restored Contact',
+              email: message?.email ?? 'unknown@example.com',
+              phone: message?.phone ?? null,
+              subject: message?.subject ?? 'RESTORED',
+              message: message?.message ?? '',
+              status: message?.status ?? 'NEW',
+            },
+          });
+        }
+      }
+    });
+
+    logger.info('Backup restoration completed successfully', { filename });
+    return true;
+  }
+}
+
+export const backupService = new BackupService();

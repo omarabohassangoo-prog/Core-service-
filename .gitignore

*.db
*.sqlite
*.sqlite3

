@@ -1,0 +1,207 @@
+prisma/seed.ts
+
+  const superAdminRole = await prisma.role.findUnique({ where: { slug: 'super_admin' } });
+  if (superAdminRole) {
+    const existingSuperAdmin = await prisma.user.findFirst({
+      where: { roleId: superAdminRole.id, deletedAt: null },
+    });
+
+    if (!existingSuperAdmin) {
+      const seedAdminEmail = process.env.SEED_SUPER_ADMIN_EMAIL?.trim();
+      const seedAdminPassword = process.env.SEED_SUPER_ADMIN_PASSWORD?.trim();
+
+      if (seedAdminEmail && seedAdminPassword) {
+        const defaultPasswordHash = await bcrypt.hash(seedAdminPassword, 12);
+        await prisma.user.create({
+          data: {
+            email: seedAdminEmail,
+            passwordHash: defaultPasswordHash,
+            firstName: 'Admin',
+            lastName: 'System',
+            phone: '+966500000000',
+            roleId: superAdminRole.id,
+            status: 'ACTIVE',
+            emailVerifiedAt: new Date(),
+            lastLoginAt: new Date(),
+          },
+        });
+        console.log('[Seed] Super Admin initialized from environment variables.');
+      } else {
+        console.warn('[Seed] No super admin created automatically. Use the install flow or set SEED_SUPER_ADMIN_EMAIL and SEED_SUPER_ADMIN_PASSWORD.');
+      }
+    }
+  }
+
+  console.log('[Seed] Appendix A seeding completed successfully.');
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  seed()
+    .catch((error) => {
+      console.error('[Seed Error]', error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
