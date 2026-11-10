@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: core-service
+    runtime: docker
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        value: file:/var/data/core.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+    disk:
+      name: core-service-data
+      mountPath: /var/data
+      sizeGB: 1

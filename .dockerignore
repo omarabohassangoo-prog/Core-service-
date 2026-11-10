@@ -1,0 +1,11 @@
+node_modules
+.git
+.github
+coverage
+dist
+backups
+.env
+.env.*
+!.env.example
+!.env.production.example
+prisma/*.db

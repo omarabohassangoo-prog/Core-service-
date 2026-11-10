@@ -1,69 +1,32 @@
-# Render Deployment Guide
+# Deploying Core Service on Render
 
-This guide shows how to deploy the project on Render.
+This repository's Prisma schemas currently use **SQLite**, not PostgreSQL. This Render configuration therefore uses a persistent disk mounted at `/var/data` and stores the database at `file:/var/data/core.db`. Do not attach a PostgreSQL URL unless the Prisma datasource and migrations have been deliberately migrated and tested for PostgreSQL.
 
-## 1. Prerequisites
-- GitHub repo connected to Render
-- PostgreSQL database ready
-- Domain configured (optional)
+## Deploy with Blueprint
 
-## 2. Create the web service
-1. Go to Render dashboard
-2. Click New > Web Service
-3. Connect this GitHub repository
-4. Choose Node runtime
+1. Push this repository to GitHub and open Render.
+2. Create a new **Blueprint** and select this repository. Render reads `render.yaml`.
+3. The web service uses the Dockerfile and a persistent disk. The Starter plan is specified because the database must persist across deploys; confirm the plan and disk pricing in Render before creating the service.
+4. In the service environment settings, provide the following values for variables marked `sync: false`:
+   - `ENCRYPTION_KEY`: exactly 64 hexadecimal characters (32 bytes). Generate locally with `openssl rand -hex 32`.
+   - `APP_URL`: the public HTTPS URL Render assigns to the service, for example `https://core-service.onrender.com`.
+   - `CORS_ORIGIN`: the exact browser origin, without a trailing slash. If the same service serves the frontend, set it to the same URL as `APP_URL`.
+   - `GEMINI_API_KEY`: optional; set only if the feature is used.
+5. Render generates `JWT_SECRET` and `REFRESH_TOKEN_SECRET`. Do not reuse them elsewhere or commit them.
+6. Deploy and wait for `/api/health/live` to pass. Then open the service URL and complete the initial `/install` setup using a unique administrator email and strong password.
 
-## 3. Build and start settings
-Set:
+## Runtime details
 
-Build command:
-```bash
-npm install
-npx prisma generate
-npm run build
-```
+- Build uses the repository's Bun lockfile, generates Prisma Client from `prisma/schema.prisma`, and builds the Vite frontend.
+- The container runs `bun run dev`; when `NODE_ENV=production`, `server.ts` serves `dist/` and does not start Vite middleware.
+- Render provides `PORT=10000`; the server binds to `0.0.0.0`.
+- SQLite is suitable here only for a single-instance deployment. A persistent disk is local to one service instance and prevents horizontal scaling. For multiple instances or higher availability, migrate both Prisma schemas and migrations to PostgreSQL first, then deploy that tested migration.
+- A persistent disk is not a backup. Configure and periodically test a separate backup and restore plan.
 
-Start command:
-```bash
-npx prisma migrate deploy && NODE_ENV=production npm run dev
-```
+## Important checks
 
-## 4. Add environment variables
-Use the production values from `.env.production.example`.
-
-Required:
-```bash
-NODE_ENV=production
-PORT=3000
-DATABASE_URL=postgresql://user:pass@host:5432/dbname?schema=public
-JWT_SECRET=your-long-secret
-REFRESH_TOKEN_SECRET=your-another-long-secret
-ENCRYPTION_KEY=64-char-hex-key
-APP_URL=https://your-app.onrender.com
-CORS_ORIGIN=https://your-app.onrender.com
-```
-
-## 5. Database setup
-Create a PostgreSQL database on Render or attach an external database.
-
-## 6. Health and validation
-After deployment:
-- check app loads
-- confirm login works
-- confirm admin access works
-- confirm build completes
-- confirm migrations apply
-
-## 7. Recommended production hardening
-- Use a custom domain with HTTPS
-- Set `CORS_ORIGIN` to the exact domain
-- Disable debug behavior in production
-- Protect backups and logs
-- Test restore process before full launch
-
-## 8. Rollback
-If deployment fails:
-- redeploy previous commit
-- verify environment variables
-- verify database connectivity
-- inspect logs and app errors
+- The configured readiness path currently checks process liveness, not database connectivity. Verify the database after deployment through the application or a protected operational check.
+- Confirm the seed and install flow on a new database. Never enable a known default administrator credential.
+- Set the Render service's `APP_URL` and `CORS_ORIGIN` after Render gives you the final URL, and update them if you add a custom domain.
+- Do not use a committed SQLite file as production data. The service uses `/var/data/core.db` on the persistent disk.
+- Review deployment logs and run the project's type check/build before accepting the release.
