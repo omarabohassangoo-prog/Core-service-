@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// User entity storing identity, credentials and authentication state
+model User {
+  /// Unique identifier
+  id                   Int       @id @default(autoincrement())
+  /// Unique verified email address
+  email                String    @unique
+  /// Argon2/Bcrypt password hash
+  passwordHash         String
+  /// First name of the user
+  firstName            String
+  /// Last name of the user
+  lastName             String
+  /// Optional mobile contact number
+  phone                String?
+  /// Optional avatar URL or identifier
+  avatar               String?
+  /// Status flag: ACTIVE, SUSPENDED, PENDING, BANNED
+  status               String    @default("ACTIVE")
+  /// Number of consecutive failed login attempts
+  failedLoginAttempts  Int       @default(0)
+  /// Timestamp until account remains locked after threshold breaches
+  lockedUntil          DateTime?
+  /// Timestamp when email was verified
+  emailVerifiedAt      DateTime?
+  /// Timestamp of latest login activity
+  lastLoginAt          DateTime?
+  /// Foreign key referencing assigned Role
+  roleId               Int
+  /// Role relationship
+  role                 Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  /// Soft deletion timestamp
+  deletedAt            DateTime?
+  /// Creation timestamp
+  createdAt            DateTime  @default(now())
+  /// Auto updated timestamp
+  updatedAt            DateTime  @updatedAt
+
+  /// Refresh token relations
+  refreshTokens        RefreshToken[]
+  /// Password reset tokens
+  passwordResetTokens  PasswordResetToken[]
+  /// Associated audit log entries
+  auditLogs            AuditLog[]
+  /// Assigned notifications
+  notifications        Notification[]
+
+  @@index([email])
+  @@index([roleId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+/// Role entity defining system and custom roles
+model Role {
+  /// Unique role identifier
+  id          Int              @id @default(autoincrement())
+  /// Display name of the role (e.g. Super Admin)
+  name        String
+  /// Unique machine identifier slug (e.g. super_admin)
+  slug        String           @unique
+  /// Descriptive summary of role scope
+  description String?
+  /// Protected flag for core system roles
+  isSystem    Boolean          @default(false)
+  /// Creation timestamp
+  createdAt   DateTime         @default(now())
+  /// Auto updated timestamp
+  updatedAt   DateTime         @updatedAt
+
+  /// Users assigned to this role
+  users       User[]
+  /// Linked permissions
+  permissions RolePermission[]
+
+  @@index([slug])
+  @@index([createdAt])
+}
+
+/// Granular permission entity
+model Permission {
+  /// Unique permission identifier
+  id          Int              @id @default(autoincrement())
+  /// Unique machine permission slug (e.g. users.create)
+  slug        String           @unique
+  /// Functional grouping module (e.g. users, settings)
+  module      String
+  /// Human readable description of permission
+  description String
+  /// Creation timestamp
+  createdAt   DateTime         @default(now())
+
+  /// Roles containing this permission
+  roles       RolePermission[]
+
+  @@index([slug])
+  @@index([module])
+}
+
+/// Pivot model linking roles to permissions
+model RolePermission {
+  /// Composite link: role id
+  roleId       Int
+  /// Composite link: permission id
+  permissionId Int
+  /// Role relation
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  /// Permission relation
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+/// Refresh token model for secure rotation and revocation
+model RefreshToken {
+  /// Unique token record identifier
+  id         Int       @id @default(autoincrement())
+  /// Foreign key of token owner
+  userId     Int
+  /// User relationship
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Hashed token digest
+  tokenHash  String    @unique
+  /// Expiration timestamp
+  expiresAt  DateTime
+  /// Revocation timestamp if invalidated early
+  revokedAt  DateTime?
+  /// IP address from which token was issued
+  ipAddress  String?
+  /// User agent header recorded at issue
+  userAgent  String?
+  /// Creation timestamp
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+/// Password reset token model with single-use lifecycle
+model PasswordResetToken {
+  /// Unique record id
+  id         Int       @id @default(autoincrement())
+  /// Target user identifier
+  userId     Int
+  /// User relationship
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Secure hash of the one-time token
+  tokenHash  String    @unique
+  /// Expiration timestamp (typically 1 hour)
+  expiresAt  DateTime
+  /// Timestamp when token was successfully redeemed
+  usedAt     DateTime?
+  /// Creation timestamp
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+/// Key-value configuration setting belonging to one of 12 groups
+model SystemSetting {
+  /// Unique setting identifier
+  id          Int      @id @default(autoincrement())
+  /// Unique configuration key
+  key         String   @unique
+  /// Stored raw or AES-256-GCM encrypted value
+  value       String
+  /// Configuration group
+  group       String
+  /// Flag denoting sensitive values requiring encryption
+  isSecret    Boolean  @default(false)
+  /// Flag preventing deletion of core keys
+  isSystem    Boolean  @default(true)
+  /// Informative description of this setting
+  description String?
+  /// Auto updated timestamp
+  updatedAt   DateTime @updatedAt
+  /// Creation timestamp
+  createdAt   DateTime @default(now())
+
+  @@index([key])
+  @@index([group])
+}
+
+/// Public and managed CMS pages
+model Page {
+  /// Unique page identifier
+  id              Int       @id @default(autoincrement())
+  /// URL friendly slug identifier
+  slug            String    @unique
+  /// Display title of the page
+  title           String
+  /// Full HTML/Markdown content
+  content         String
+  /// SEO meta title
+  metaTitle       String?
+  /// SEO meta description
+  metaDescription String?
+  /// SEO meta keywords
+  metaKeywords    String?
+  /// Sort order
+  order           Int       @default(0)
+  /// Publishing visibility flag
+  isPublished     Boolean   @default(true)
+  /// Creation timestamp
+  createdAt       DateTime  @default(now())
+  /// Auto updated timestamp
+  updatedAt       DateTime  @updatedAt
+  /// Optional soft deletion timestamp
+  deletedAt       DateTime?
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([createdAt])
+}
+
+/// Messages submitted through public contact forms
+model ContactMessage {
+  /// Unique message identifier
+  id        Int      @id @default(autoincrement())
+  /// Sender name
+  name      String
+  /// Sender email
+  email     String
+  /// Optional contact phone number
+  phone     String?
+  /// Subject line
+  subject   String
+  /// Body content of the inquiry
+  message   String
+  /// Processing status: NEW, READ, REPLIED, ARCHIVED
+  status    String   @default("NEW")
+  /// Creation timestamp
+  createdAt DateTime @default(now())
+  /// Auto updated timestamp
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Reusable and editable system templates (Email, Invoice, Report, Notifications)
+model Template {
+  /// Unique template identifier
+  id          Int      @id @default(autoincrement())
+  /// Immutable template key (e.g. welcome, password_reset, invoice_standard)
+  key         String   @unique
+  /// Template category: email, invoice, report, notification
+  type        String
+  /// Title or subject in Arabic/English
+  title       String
+  /// Content or HTML template
+  content     String
+  /// Comma-separated supported channels (e.g. email,sms,whatsapp,inapp)
+  channels    String?
+  /// System template protection flag
+  isSystem    Boolean  @default(false)
+  /// Version number
+  version     Int      @default(1)
+  /// Creation timestamp
+  createdAt   DateTime @default(now())
+  /// Auto updated timestamp
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([type])
+}
+
+/// Immutable audit log recording administrative and security actions
+model AuditLog {
+  /// Unique log entry identifier
+  id        Int      @id @default(autoincrement())
+  /// Performing user identifier (nullable if user deleted)
+  userId    Int?
+  /// User relationship
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Executed action verb (e.g. users.create, settings.write, backups.restore)
+  action    String
+  /// Target module/entity (e.g. users, settings, system)
+  module    String
+  /// JSON-encoded audit metadata/changes including oldValue and newValue
+  details   String?
+  /// Origin client IP address
+  ipAddress String?
+  /// Client user agent
+  userAgent String?
+  /// Traceable request id
+  requestId String?
+  /// Event timestamp
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
+}
+
+/// User notifications
+model Notification {
+  /// Unique notification identifier
+  id        Int       @id @default(autoincrement())
+  /// Target user identifier
+  userId    Int
+  /// User relationship
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Notification subject title
+  title     String
+  /// Detailed notification body
+  message   String
+  /// Category: INFO, SUCCESS, WARNING, ALERT
+  type      String    @default("INFO")
+  /// Delivery channel: inapp, email, sms, whatsapp
+  channel   String    @default("inapp")
+  /// Timestamp when read by user
+  readAt    DateTime?
+  /// Creation timestamp
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([readAt])
+  @@index([createdAt])
+}

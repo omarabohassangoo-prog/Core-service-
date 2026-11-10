@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// User entity storing identity, credentials and authentication state
+model User {
+  id                   Int       @id @default(autoincrement())
+  email                String    @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  phone                String?
+  avatar               String?
+  status               String    @default("ACTIVE")
+  failedLoginAttempts  Int       @default(0)
+  lockedUntil          DateTime?
+  emailVerifiedAt      DateTime?
+  lastLoginAt          DateTime?
+  roleId               Int
+  role                 Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@index([roleId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+/// Role entity defining system and custom roles
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String
+  slug        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@index([slug])
+  @@index([createdAt])
+}
+
+/// Granular permission entity
+model Permission {
+  id          Int              @id @default(autoincrement())
+  slug        String           @unique
+  module      String
+  description String
+  createdAt   DateTime         @default(now())
+
+  roles       RolePermission[]
+
+  @@index([slug])
+  @@index([module])
+}
+
+/// Pivot model linking roles to permissions
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+/// Refresh token model for secure rotation and revocation
+model RefreshToken {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+/// Password reset token model with single-use lifecycle
+model PasswordResetToken {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+/// Key-value configuration setting belonging to one of 12 groups
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  group       String
+  isSecret    Boolean  @default(false)
+  isSystem    Boolean  @default(true)
+  description String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([key])
+  @@index([group])
+}
+
+/// Public and managed CMS pages
+model Page {
+  id              Int       @id @default(autoincrement())
+  slug            String    @unique
+  title           String
+  content         String
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+  order           Int       @default(0)
+  isPublished     Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([slug])
+  @@index([isPublished])
+  @@index([createdAt])
+}
+
+/// Messages submitted through public contact forms
+model ContactMessage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Reusable and editable system templates (Email, Invoice, Report, Notifications)
+model Template {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  type        String
+  title       String
+  content     String
+  channels    String?
+  isSystem    Boolean  @default(false)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([type])
+}
+
+/// Immutable audit log recording administrative and security actions
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  module    String
+  details   String?
+  ipAddress String?
+  userAgent String?
+  requestId String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
+}
+
+/// User notifications
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String    @default("INFO")
+  channel   String    @default("inapp")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([readAt])
+  @@index([createdAt])
+}

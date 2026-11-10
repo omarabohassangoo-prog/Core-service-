@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise Core System",
+  "description": "نظام Enterprise متكامل متعدد الوحدات: التنصيب، المصادقة، الصفحات العامة، لوحة الإدارة، ولوحة المستخدم.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
