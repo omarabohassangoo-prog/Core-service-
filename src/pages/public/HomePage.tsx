@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicApi } from '../../api/public.api';
 import { PageItem } from '../../types';
+import { useSettings } from '../../context/SettingsContext';
 
 export const HomePage: React.FC = () => {
   const [page, setPage] = useState<PageItem | null>(null);
+  const { get } = useSettings();
 
   useEffect(() => {
     publicApi.getPage('home').then((res) => {
@@ -19,12 +21,10 @@ export const HomePage: React.FC = () => {
           <div className="hero-content">
             <span className="hero-badge">معايير Enterprise المؤسسية</span>
             <h1 className="hero-title">
-              {page ? page.title : 'نظام Enterprise المتكامل متعدد الوحدات'}
+              {get('pages.home.heroTitle', page?.title || 'نظام Enterprise المتكامل متعدد الوحدات')}
             </h1>
             <p className="hero-subtitle">
-              {page
-                ? page.content
-                : 'بنية تحتية برمجية متطورة تعتمد الفصل المعماري التام، المصادقة الثنائية الصارمة، إدارة الصلاحيات RBAC، والتكامل السحابي الآمن.'}
+              {get('pages.home.heroSubtitle', page?.content || 'بنية تحتية برمجية متطورة تعتمد الفصل المعماري التام، المصادقة الثنائية الصارمة، إدارة الصلاحيات RBAC، والتكامل السحابي الآمن.')}
             </p>
             <div className="hero-cta">
               <Link to="/register" className="btn btn-primary btn-lg">

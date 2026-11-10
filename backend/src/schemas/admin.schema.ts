@@ -63,6 +63,14 @@ export const createPageSchema = z.object({
 
 export const updatePageSchema = createPageSchema.partial();
 
+export const updateTemplateSchema = z.object({
+  title: z.string().trim().min(1, 'عنوان القالب مطلوب').max(180).optional(),
+  content: z.string().min(1, 'محتوى القالب مطلوب').max(100000).optional(),
+  channels: z.string().trim().max(200).optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'يجب إرسال حقل واحد على الأقل للتحديث',
+});
+
 export const factoryResetSchema = z.object({
   confirmText: z.literal('RESET', {
     message: 'يجب كتابة كلمة RESET لتأكيد إعادة ضبط المصنع',
