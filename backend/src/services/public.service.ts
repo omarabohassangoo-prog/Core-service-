@@ -77,10 +77,27 @@ export class PublicService {
       take: 50,
     });
 
-    const result: Record<string, string> = {};
-    for (const s of settings) {
-      result[s.key] = s.value;
+    const result = {
+      general: {} as Record<string, string>,
+      pages: {} as Record<string, Record<string, string>>,
+      auth: {} as Record<string, string>,
+      theme: {} as Record<string, string>,
+    };
+
+    for (const setting of settings) {
+      const parts = setting.key.split('.');
+      if (parts[0] === 'pages' && parts[1]) {
+        result.pages[parts[1]] ??= {};
+        result.pages[parts[1]][parts.slice(2).join('.')] = setting.value;
+      } else if (setting.key.startsWith('auth.')) {
+        result.auth[parts.slice(1).join('.')] = setting.value;
+      } else if (setting.group === 'css' || setting.key.startsWith('theme.')) {
+        result.theme[parts.slice(1).join('.')] = setting.value;
+      } else {
+        result.general[parts.slice(1).join('.') || setting.key] = setting.value;
+      }
     }
+
     return result;
   }
 }

@@ -1,29 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { publicApi } from '../../api/public.api';
+import { useSettings } from '../../context/SettingsContext';
 
 export const PublicLayout: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
-  const [siteName, setSiteName] = useState('Enterprise Core');
+  const { settings, get } = useSettings();
+  const siteName = get('general.siteName', get('general.site_name', 'Enterprise Core'));
 
-  useEffect(() => {
-    publicApi.getSettings().then((res) => {
-      if (res.data && res.data['general.site_name']) {
-        setSiteName(res.data['general.site_name']);
-      }
-    });
-  }, []);
-
-  const navLinks = [
-    { to: '/', label: 'الرئيسية' },
-    { to: '/about', label: 'من نحن' },
-    { to: '/services', label: 'خدماتنا' },
-    { to: '/faq', label: 'الأسئلة الشائعة' },
-    { to: '/terms', label: 'الشروط والخصوصية' },
-    { to: '/contact', label: 'اتصل بنا' },
+  const defaults = [
+    { slug: 'home', to: '/', label: 'الرئيسية' },
+    { slug: 'about', to: '/about', label: 'من نحن' },
+    { slug: 'services', to: '/services', label: 'خدماتنا' },
+    { slug: 'faq', to: '/faq', label: 'الأسئلة الشائعة' },
+    { slug: 'terms', to: '/terms', label: 'الشروط والخصوصية' },
+    { slug: 'contact', to: '/contact', label: 'اتصل بنا' },
   ];
+  const navLinks = defaults.filter((link) => settings.pages[link.slug]?.enabled !== 'false' && settings.pages[link.slug]?.showInNav !== 'false').map((link) => ({
+    ...link,
+    label: settings.pages[link.slug]?.navLabel || settings.pages[link.slug]?.navLabelAr || link.label,
+  }));
 
   return (
     <div className="layout-root">

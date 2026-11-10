@@ -25,8 +25,8 @@ export const publicApi = {
     return res.data;
   },
 
-  getSettings: async (): Promise<ApiResponse<Record<string, string>>> => {
-    const res = await apiClient.get<ApiResponse<Record<string, string>>>('/public/settings');
+  getSettings: async (): Promise<ApiResponse<import('../context/SettingsContext').PublicSettings>> => {
+    const res = await apiClient.get<ApiResponse<import('../context/SettingsContext').PublicSettings>>('/public/settings/public');
     return res.data;
   },
 };

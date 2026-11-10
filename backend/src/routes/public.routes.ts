@@ -28,7 +28,7 @@ router.post(
 );
 
 router.get(
-  '/settings',
+  ['/settings/public', '/settings'],
   readLimiter,
   asyncHandler(publicController.getSettings.bind(publicController))
 );
