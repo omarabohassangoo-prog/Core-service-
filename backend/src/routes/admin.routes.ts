@@ -13,6 +13,7 @@ import {
   testServiceSchema,
   createPageSchema,
   updatePageSchema,
+  updateTemplateSchema,
   factoryResetSchema,
 } from '../schemas/admin.schema';
 
@@ -125,6 +126,7 @@ router.get(
 router.put(
   '/templates/:key',
   requirePermission('templates.write'),
+  validate(updateTemplateSchema, 'body'),
   asyncHandler(adminController.updateTemplate.bind(adminController))
 );
 

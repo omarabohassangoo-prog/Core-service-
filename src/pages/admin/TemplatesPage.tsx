@@ -21,6 +21,8 @@ export const TemplatesPage: React.FC = () => {
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>('welcome');
   const [activeTemplate, setActiveTemplate] = useState<TemplateItem | null>(null);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   // Editor state
   const [title, setTitle] = useState('');
@@ -33,7 +35,7 @@ export const TemplatesPage: React.FC = () => {
   const fetchTemplates = async () => {
     setIsLoading(true);
     try {
-      const res = await adminApi.listTemplates();
+      const res = await adminApi.listTemplates(typeFilter || undefined);
       if (res.data) {
         setTemplates(res.data);
         const initial = res.data.find((t) => t.key === selectedKey) || res.data[0];
@@ -50,7 +52,12 @@ export const TemplatesPage: React.FC = () => {
 
   useEffect(() => {
     fetchTemplates();
-  }, []);
+  }, [typeFilter]);
+
+  const visibleTemplates = templates.filter((template) => {
+    const query = search.trim().toLowerCase();
+    return !query || `${template.key} ${template.title} ${template.type}`.toLowerCase().includes(query);
+  });
 
   const selectTemplate = (tpl: TemplateItem) => {
     setSelectedKey(tpl.key);
@@ -146,9 +153,32 @@ export const TemplatesPage: React.FC = () => {
         </div>
       ) : (
         <div className="templates-layout">
+          <div className="template-toolbar">
+            <input
+              type="search"
+              className="form-input"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="ابحث بالاسم أو المفتاح أو النوع..."
+              aria-label="البحث في القوالب"
+            />
+            <select
+              className="form-input"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              aria-label="تصفية نوع القالب"
+            >
+              <option value="">كل الأنواع</option>
+              <option value="EMAIL">البريد الإلكتروني</option>
+              <option value="NOTIFICATION">الإشعارات</option>
+              <option value="SMS">الرسائل النصية</option>
+              <option value="REPORT">التقارير</option>
+            </select>
+          </div>
+
           {/* Template Selector Ribbon */}
           <div className="template-pills-bar">
-            {templates.map((tpl) => (
+            {visibleTemplates.map((tpl) => (
               <button
                 key={tpl.key}
                 type="button"
